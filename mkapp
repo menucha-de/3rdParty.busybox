@@ -1,0 +1,39 @@
+#!/bin/bash
+
+set -e
+set -x
+
+env
+
+. /usr/share/mkapp/functions
+
+echo "deb-src http://httpredir.debian.org/debian ${DIST} main" >> /etc/apt/sources.list
+
+apt-get update
+apt-get source -y busybox
+
+cd busybox-*
+
+sed -i debian/config/pkg/deb -e "s/# CONFIG_DPKG is not set/CONFIG_DPKG=y/g" -e "s/# CONFIG_DPKG_DEB is not set/CONFIG_DPKG_DEB=y/g" -e "s/# CONFIG_FEATURE_BASH_IS_ASH is not set/CONFIG_FEATURE_BASH_IS_ASH=y/g" -e "s/# CONFIG_LSUSB is not set/CONFIG_LSUSB=y/g"
+sed -i -e '1p' debian/changelog
+sed -i -e '1s/)/+peramic0)/' -e "2i\\\\\n\\n  * Enables dpkg\\n\\n -- peraMIC <opensource@peraMIC.io>  \$(date -R)\\n" debian/changelog
+head -6 debian/changelog
+sed -i -e 's/RUN_TESTSUITE = y/RUN_TESTSUITE = n/g' debian/rules
+head -15 debian/rules
+
+cd -
+
+for arch in $ARCH; do
+  apt-get -y build-dep -a${arch} busybox
+  apt-get install -y libc6:${arch}
+  cd -
+  DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -B -j12 -a${arch} -i -I -Itarget --no-sign
+  cd -
+done
+
+mkdir target
+mv *_*.* target
+
+if [ "$PUBLISH" ]; then
+  publish_debs
+fi
